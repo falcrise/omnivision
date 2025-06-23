@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Video Analysis with Vertex AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col min-h-screen">
+
+    <header class="bg-gray-800 shadow-md p-4">
+        <h1 class="text-2xl font-bold text-center text-cyan-400">📹 Real-Time Video Analyzer</h1>
+    </header>
+
+    <main class="flex-grow container mx-auto p-4 md:p-8 flex flex-col lg:flex-row gap-8">
+
+        <!-- Left Side: Camera Feed and Controls -->
+        <div class="flex-1 bg-gray-800 rounded-lg shadow-xl p-6 flex flex-col">
+            <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Camera Feed</h2>
+            <div class="relative w-full aspect-video bg-black rounded-md overflow-hidden flex items-center justify-center">
+                <video id="webcam" class="w-full h-full" autoplay playsinline></video>
+                <canvas id="canvas" class="hidden"></canvas>
+                 <div id="camera-prompt" class="absolute text-gray-400">
+                    Please allow camera access...
+                </div>
+            </div>
+            <div id="scene-description" class="mt-4 text-center text-gray-400 italic bg-black/20 p-2 rounded-md h-12 flex items-center justify-center">Awaiting analysis...</div>
+            <div class="mt-6 flex flex-col sm:flex-row gap-4">
+                 <button id="startButton" class="w-full sm:w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out disabled:bg-gray-500">
+                    Start Analysis
+                </button>
+                <button id="stopButton" class="w-full sm:w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out disabled:bg-gray-500" disabled>
+                    Stop Analysis
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Side: Configuration and Alerts -->
+        <div class="flex-1 bg-gray-800 rounded-lg shadow-xl p-6 flex flex-col">
+            <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Configuration & Alerts</h2>
+            
+            <div class="space-y-4 mb-6">
+                 <div>
+                    <label for="alert-condition" class="block text-sm font-medium text-gray-300 mb-1">What to alert for?</label>
+                    <input type="text" id="alert-condition" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., person not wearing helmet, child falling">
+                </div>
+                 <div>
+                    <label for="accessToken" class="block text-sm font-medium text-gray-300 mb-1">Vertex AI Access Token</label>
+                    <input type="password" id="accessToken" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" placeholder="Enter your gcloud auth token">
+                </div>
+            </div>
+
+            <div class="flex-grow bg-gray-900/50 rounded-md p-4 flex flex-col">
+                 <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-semibold text-lg">Alerts</h3>
+                    <div id="status-indicator" class="flex items-center gap-2">
+                        <span id="status-text" class="text-gray-400">Idle</span>
+                        <div id="loader" class="loader hidden"></div>
+                    </div>
+                </div>
+                <div id="alerts-container" class="h-64 overflow-y-auto space-y-3 pr-2">
+                   <!-- Alerts will be injected here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- DOM Elements ---
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const alertConditionInput = document.getElementById('alert-condition');
+        const accessTokenInput = document.getElementById('accessToken');
+        const alertsContainer = document.getElementById('alerts-container');
+        const cameraPrompt = document.getElementById('camera-prompt');
+        const loader = document.getElementById('loader');
+        const statusText = document.getElementById('status-text');
+        const sceneDescription = document.getElementById('scene-description');
+
+        // --- State ---
+        let stream;
+        let analysisTimeoutId;
+        let isAnalyzing = false;
+
+        // --- Vertex AI Configuration ---
+        const ENDPOINT_ID = "1444718696479064064";
+        const PROJECT_ID = "828620032455";
+        const REGION = "asia-southeast1";
+        const DEDICATED_ENDPOINT_DOMAIN = "1444718696479064064.asia-southeast1-828620032455.prediction.vertexai.goog";
+        const API_ENDPOINT = `https://${DEDICATED_ENDPOINT_DOMAIN}/v1/projects/${PROJECT_ID}/locations/${REGION}/endpoints/${ENDPOINT_ID}:predict`;
+
+        // --- Core Functions ---
+
+        /**
+         * Initializes the webcam stream.
+         */
+        async function initWebcam() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+                cameraPrompt.classList.add('hidden');
+                video.addEventListener('loadedmetadata', () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                });
+            } catch (err) {
+                console.error("Error accessing webcam:", err);
+                addAlert('error', 'Could not access webcam. Please check permissions and try again.');
+                cameraPrompt.textContent = 'Camera access denied.';
+            }
+        }
+
+        /**
+         * Starts the video analysis loop.
+         */
+        function startAnalysis() {
+            const alertCondition = alertConditionInput.value.trim();
+            const accessToken = accessTokenInput.value.trim();
+
+            if (!alertCondition || !accessToken) {
+                addAlert('error', 'Please fill in the "Alert for" and "Access Token" fields.');
+                return;
+            }
+            if (!stream) {
+                 addAlert('error', 'Webcam is not available. Cannot start analysis.');
+                 return;
+            }
+
+            isAnalyzing = true;
+            updateUIState();
+            addAlert('info', 'Analysis started.');
+            analyzeFrame(); // Start the first frame analysis immediately.
+        }
+
+        /**
+         * Stops the video analysis loop.
+         */
+        function stopAnalysis() {
+            isAnalyzing = false;
+            clearTimeout(analysisTimeoutId); // Stop the pending next frame
+            updateUIState();
+            addAlert('info', 'Analysis stopped.');
+            sceneDescription.textContent = 'Awaiting analysis...';
+        }
+
+        /**
+         * Captures a frame, sends it to Vertex AI, and handles the response.
+         */
+        async function analyzeFrame() {
+            if (!isAnalyzing) return;
+
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+            
+            // Simplified prompt asking for a two-line response instead of JSON.
+            const textPrompt = `First, describe the image in a single short sentence. Then, on a new line, write ONLY the single word 'true' or 'false' for the condition: '${alertConditionInput.value}'.`;
+
+            const payload = {
+                "instances": [
+                    {
+                        "@requestFormat": "chatCompletions",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": { "url": `data:image/jpeg;base64,${imageData}` }
+                                    },
+                                    {
+                                        "type": "text", "text": textPrompt
+                                    }
+                                ]
+                            }
+                        ],
+                        "max_tokens": 1024, "temperature": 0.6, "top_p": 1.0, "top_k": -1
+                    }
+                ]
+            };
+
+            setLoading(true);
+
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessTokenInput.value}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    let errorMessage = errorText;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson?.error?.message || errorMessage;
+                    } catch (e) {
+                         console.warn("Server error response was not in JSON format.");
+                    }
+                    throw new Error(`API Error (${response.status}): ${errorMessage}`);
+                }
+
+                const data = await response.json();
+                processApiResponse(data);
+
+            } catch (err) {
+                console.error('Error calling Vertex AI:', err);
+                addAlert('error', `Failed to analyze frame: ${err.message}`);
+                stopAnalysis(); // Stop on error
+            } finally {
+                setLoading(false);
+                // Queue the next analysis frame if still active.
+                if (isAnalyzing) {
+                    analysisTimeoutId = setTimeout(analyzeFrame, 1000); // 1-second delay between calls
+                }
+            }
+        }
+
+        /**
+         * Processes the prediction from the Vertex AI API.
+         */
+        function processApiResponse(data) {
+            const predictionText = data?.predictions?.choices?.[0]?.message?.content;
+
+            // Check if the response is a valid, non-empty string.
+            if (typeof predictionText !== 'string' || predictionText.trim() === '') {
+                addAlert('error', 'Model returned an empty or invalid response.');
+                sceneDescription.textContent = 'Model returned an empty response.';
+                return;
+            }
+
+            try {
+                const trimmedText = predictionText.trim();
+                const lines = trimmedText.split('\n').map(line => line.trim()).filter(Boolean);
+                
+                if (lines.length === 0) {
+                    throw new Error("Model returned an empty response.");
+                }
+
+                const lastLine = lines[lines.length - 1].toLowerCase().replace(/[\.,]/g, '');
+                let alertFound = false;
+
+                if (lastLine === 'true') {
+                    const alertMessage = `Alert Triggered: ${alertConditionInput.value}`;
+                    addAlert('warning', alertMessage);
+                    alertFound = true;
+                } else if (lastLine === 'false') {
+                    console.log("Condition not met.");
+                    alertFound = true;
+                }
+
+                // Determine the description part
+                const descriptionLines = alertFound ? lines.slice(0, -1) : lines;
+                if (descriptionLines.length > 0) {
+                    sceneDescription.textContent = descriptionLines.join(' ');
+                } else {
+                    sceneDescription.textContent = "No description provided by model.";
+                }
+
+            } catch (e) {
+                console.error("Error processing model response:", e);
+                addAlert('error', `Error processing response: ${predictionText}`);
+                sceneDescription.textContent = 'Error processing response.';
+            }
+        }
+
+
+        // --- UI Helper Functions ---
+
+        /**
+         * Updates buttons and status text based on the analysis state.
+         */
+        function updateUIState() {
+            startButton.disabled = isAnalyzing;
+            stopButton.disabled = !isAnalyzing;
+            alertConditionInput.disabled = isAnalyzing;
+            accessTokenInput.disabled = isAnalyzing;
+
+            if (isAnalyzing) {
+                statusText.textContent = 'Running...';
+                statusText.classList.remove('text-gray-400');
+                statusText.classList.add('text-green-400');
+            } else {
+                statusText.textContent = 'Idle';
+                statusText.classList.remove('text-green-400');
+                statusText.classList.add('text-gray-400');
+            }
+        }
+
+        /**
+         * Shows or hides the loading spinner.
+         * @param {boolean} isLoading
+         */
+        function setLoading(isLoading) {
+            if (isLoading) {
+                loader.classList.remove('hidden');
+            } else {
+                loader.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Adds a formatted alert message to the UI.
+         * @param {'info'|'warning'|'error'} type The type of alert.
+         * @param {string} message The message to display.
+         */
+        function addAlert(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            let bgColor, textColor, icon;
+
+            switch(type) {
+                case 'warning': // This is now the main alert, styled in red
+                    bgColor = 'bg-red-600/30';
+                    textColor = 'text-red-300';
+                    icon = '🚨';
+                    break;
+                case 'error': // For system/API errors
+                    bgColor = 'bg-yellow-500/20';
+                    textColor = 'text-yellow-400';
+                    icon = '❌';
+                    break;
+                default: // info
+                    bgColor = 'bg-blue-500/20';
+                    textColor = 'text-blue-300';
+                    icon = 'ℹ️';
+            }
+            
+            const alertEl = document.createElement('div');
+            alertEl.className = `p-3 rounded-lg ${bgColor} ${textColor} text-sm flex items-start gap-3`;
+            alertEl.innerHTML = `
+                <span class="mt-1 text-lg">${icon}</span>
+                <div class="flex-1">
+                    <p class="font-semibold">${message}</p>
+                    <p class="text-xs text-gray-400">${timestamp}</p>
+                </div>
+            `;
+            alertsContainer.prepend(alertEl);
+        }
+
+        // --- Event Listeners ---
+        startButton.addEventListener('click', startAnalysis);
+        stopButton.addEventListener('click', stopAnalysis);
+        window.addEventListener('load', initWebcam);
+    </script>
+</body>
+</html>
