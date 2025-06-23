@@ -241,30 +241,27 @@
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];            // Get current alert condition (allows for dynamic updates)
-            const currentAlertCondition = getCurrentAlertCondition();
-              // Clear prompt focused on scene description first, then condition evaluation
-            const textPrompt = `You are a visual safety monitoring AI. Analyze this image for the specific condition: "${currentAlertCondition}"
+            const currentAlertCondition = getCurrentAlertCondition();            // Clear prompt focused on scene description first, then condition evaluation
+            const textPrompt = `You are a visual safety monitoring AI. Analyze this image for: "${currentAlertCondition}"
 
-Respond in EXACTLY this format:
+RESPOND IN EXACTLY THIS FORMAT:
 
-SCENE: [Describe what you see, focusing specifically on: ${currentAlertCondition}]
+SCENE: [Describe what you see in the image - people, objects, activities, clothing, safety equipment, environment]
 ALERT: [true or false]
 
-CRITICAL ANALYSIS FOCUS: "${currentAlertCondition}"
+TASK: Check for "${currentAlertCondition}"
 
 INSTRUCTIONS:
-- SCENE: Describe what you observe, paying special attention to elements related to "${currentAlertCondition}"
-- Look carefully for the specific things mentioned in the condition
-- ALERT: Answer "true" ONLY if "${currentAlertCondition}" is actually happening/present in the image
-- ALERT: Answer "false" if "${currentAlertCondition}" is NOT happening/present in the image
+- SCENE: Always provide a detailed description of what you observe in the image
+- Focus on elements related to: "${currentAlertCondition}"
+- ALERT: true if "${currentAlertCondition}" IS happening/present, false if NOT
 
-LOGIC EXAMPLES:
-- If condition says "person not wearing glasses" → ALERT: true when person has NO glasses, false when person HAS glasses
-- If condition says "person wearing helmet" → ALERT: true when person HAS helmet, false when person has NO helmet
-- If condition says "child falling" → ALERT: true when child IS falling, false when child is NOT falling
-- If condition says "unsafe behavior" → ALERT: true when unsafe behavior IS present, false when behavior is safe
+EXAMPLES:
+- Condition "person not wearing glasses" → ALERT: true when NO glasses, false when HAS glasses
+- Condition "person wearing helmet" → ALERT: true when HAS helmet, false when NO helmet
+- Condition "unsafe behavior" → ALERT: true when unsafe IS present, false when safe
 
-Base your ALERT decision on whether the exact condition "${currentAlertCondition}" matches what you see in the image.`;
+Remember: Always start with SCENE: followed by your description, then ALERT: followed by true or false.`;
 
             const payload = {
                 "instances": [
@@ -286,11 +283,11 @@ Base your ALERT decision on whether the exact condition "${currentAlertCondition
                                         "type": "text", "text": textPrompt
                                     }
                                 ]
-                            }
-                        ],                        "max_tokens": 120,
-                        "temperature": 0.15,
-                        "top_p": 0.85,
-                        "top_k": 30
+                            }                        ],
+                        "max_tokens": 200,
+                        "temperature": 0.3,
+                        "top_p": 0.9,
+                        "top_k": 40
                     }
                 ]
             };
@@ -353,44 +350,68 @@ Base your ALERT decision on whether the exact condition "${currentAlertCondition
                 
                 let description = '';
                 let booleanResult = null;
+                  // Parse the structured response format
+                const lines = trimmedText.split('\n').map(line => line.trim()).filter(Boolean);
                 
-                // Parse the structured response format
-                const lines = trimmedText.split('\n').map(line => line.trim()).filter(Boolean);                for (const line of lines) {
+                console.log("Parsed lines:", lines); // Debug log
+                
+                for (const line of lines) {
                     if (line.startsWith('SCENE:')) {
                         description = line.substring('SCENE:'.length).trim();
+                        console.log("Found SCENE:", description);
                     } else if (line.startsWith('ALERT:')) {
                         const alertLine = line.substring('ALERT:'.length).trim();
+                        console.log("Found ALERT line:", alertLine);
                         // Extract just the true/false part - handle various formats
                         const booleanMatch = alertLine.match(/^\s*(true|false)(\s|$|-|\()/i);
                         if (booleanMatch) {
                             booleanResult = booleanMatch[1].toLowerCase();
+                            console.log("Extracted boolean:", booleanResult);
                         } else {
                             // Fallback: check if the line contains true/false
                             const fallbackMatch = alertLine.match(/(true|false)/i);
                             if (fallbackMatch) {
                                 booleanResult = fallbackMatch[1].toLowerCase();
+                                console.log("Fallback boolean:", booleanResult);
                             }
                         }
                     }
                     // Backward compatibility - also check for old format
                     else if (line.startsWith('DESCRIPTION:')) {
                         description = line.substring('DESCRIPTION:'.length).trim();
+                        console.log("Found DESCRIPTION:", description);
                     } else if (line.startsWith('CONDITION_CHECK:')) {
                         const conditionLine = line.substring('CONDITION_CHECK:'.length).trim();
                         const booleanMatch = conditionLine.match(/^\s*(true|false)(\s|$|-|\()/i);
                         if (booleanMatch) {
                             booleanResult = booleanMatch[1].toLowerCase();
+                            console.log("Found CONDITION_CHECK boolean:", booleanResult);
                         }
                     }
                 }
-                
-                // Fallback parsing if structured format not found
+                  // Fallback parsing if structured format not found
                 if (!description || !booleanResult) {
-                    console.log("Structured format not found, trying fallback parsing...");
-                      // Try to extract description and boolean from any format
+                    console.log("Structured format incomplete. Description:", description, "Boolean:", booleanResult);
+                    console.log("Trying fallback parsing...");
+                    
+                    // Try to extract description and boolean from any format
                     if (!description) {
-                        // Use first non-empty line as description, try multiple prefixes
-                        description = lines.length > 0 ? lines[0].replace(/^(SCENE:|DESCRIPTION:|DESC:)/i, '').trim() : 'Scene analysis in progress';
+                        // Try different approaches to find description
+                        for (const line of lines) {
+                            // Remove common prefixes and use first meaningful line as description
+                            const cleanLine = line.replace(/^(SCENE:|DESCRIPTION:|DESC:|.*:)/i, '').trim();
+                            if (cleanLine.length > 10 && !/(true|false)/i.test(cleanLine)) {
+                                description = cleanLine;
+                                console.log("Fallback description found:", description);
+                                break;
+                            }
+                        }
+                        
+                        // If still no description, use first non-boolean line
+                        if (!description && lines.length > 0) {
+                            description = lines[0].replace(/^(SCENE:|DESCRIPTION:|DESC:)/i, '').trim();
+                            console.log("Using first line as description:", description);
+                        }
                     }
                     
                     if (!booleanResult) {
@@ -399,6 +420,7 @@ Base your ALERT decision on whether the exact condition "${currentAlertCondition
                             const detected = detectBooleanResponse(line);
                             if (detected) {
                                 booleanResult = detected;
+                                console.log("Fallback boolean found:", booleanResult);
                                 break;
                             }
                         }
@@ -406,12 +428,16 @@ Base your ALERT decision on whether the exact condition "${currentAlertCondition
                         // If still no boolean found, try the entire text
                         if (!booleanResult) {
                             booleanResult = detectBooleanResponse(trimmedText);
+                            console.log("Final fallback boolean:", booleanResult);
                         }
                     }
                 }
+                  // Ensure we have a description to display
+                const finalDescription = description || 'Analyzing scene...';
+                console.log("Final description to display:", finalDescription);
                 
                 // Update scene description
-                sceneDescription.textContent = description || 'Scene detected but description unavailable';                // Handle alert logic
+                sceneDescription.textContent = finalDescription;// Handle alert logic
                 if (booleanResult === 'true') {
                     const alertMessage = `🚨 DETECTED: ${alertCondition}`;
                     addAlert('warning', alertMessage);
