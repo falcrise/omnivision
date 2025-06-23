@@ -242,28 +242,39 @@
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];            // Get current alert condition (allows for dynamic updates)
             const currentAlertCondition = getCurrentAlertCondition();
-            
-            // Structured prompt with clear instructions and markers
-            const textPrompt = `You are an AI safety monitor. Analyze this image and respond in EXACTLY this format:
+              // Clear prompt focused on scene description first, then condition evaluation
+            const textPrompt = `You are a visual safety monitoring AI. Analyze this image for the specific condition: "${currentAlertCondition}"
 
-DESCRIPTION: [Your description of what you see in the image]
-CONDITION_CHECK: [true or false] - Does the image show: ${currentAlertCondition}
+Respond in EXACTLY this format:
 
-Requirements:
-- DESCRIPTION must be a single sentence describing what you see
-- CONDITION_CHECK must be exactly "true" or "false" followed by your reasoning
-- Be very precise with the condition check
-- If you're unsure, err on the side of caution and return true
+SCENE: [Describe what you see, focusing specifically on: ${currentAlertCondition}]
+ALERT: [true or false]
 
-Example response:
-DESCRIPTION: A person wearing safety glasses is sitting at a desk
-CONDITION_CHECK: false - The person is wearing glasses, so the condition "person not wearing glasses" is not met`;
+CRITICAL ANALYSIS FOCUS: "${currentAlertCondition}"
+
+INSTRUCTIONS:
+- SCENE: Describe what you observe, paying special attention to elements related to "${currentAlertCondition}"
+- Look carefully for the specific things mentioned in the condition
+- ALERT: Answer "true" ONLY if "${currentAlertCondition}" is actually happening/present in the image
+- ALERT: Answer "false" if "${currentAlertCondition}" is NOT happening/present in the image
+
+LOGIC EXAMPLES:
+- If condition says "person not wearing glasses" → ALERT: true when person has NO glasses, false when person HAS glasses
+- If condition says "person wearing helmet" → ALERT: true when person HAS helmet, false when person has NO helmet
+- If condition says "child falling" → ALERT: true when child IS falling, false when child is NOT falling
+- If condition says "unsafe behavior" → ALERT: true when unsafe behavior IS present, false when behavior is safe
+
+Base your ALERT decision on whether the exact condition "${currentAlertCondition}" matches what you see in the image.`;
 
             const payload = {
                 "instances": [
                     {
                         "@requestFormat": "chatCompletions",
                         "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are a safety monitoring AI. Always respond in the exact format requested. Be precise and consistent."
+                            },
                             {
                                 "role": "user",
                                 "content": [
@@ -276,8 +287,10 @@ CONDITION_CHECK: false - The person is wearing glasses, so the condition "person
                                     }
                                 ]
                             }
-                        ],
-                        "max_tokens": 1600
+                        ],                        "max_tokens": 120,
+                        "temperature": 0.15,
+                        "top_p": 0.85,
+                        "top_k": 30
                     }
                 ]
             };
@@ -342,15 +355,29 @@ CONDITION_CHECK: false - The person is wearing glasses, so the condition "person
                 let booleanResult = null;
                 
                 // Parse the structured response format
-                const lines = trimmedText.split('\n').map(line => line.trim()).filter(Boolean);
-                
-                for (const line of lines) {
-                    if (line.startsWith('DESCRIPTION:')) {
+                const lines = trimmedText.split('\n').map(line => line.trim()).filter(Boolean);                for (const line of lines) {
+                    if (line.startsWith('SCENE:')) {
+                        description = line.substring('SCENE:'.length).trim();
+                    } else if (line.startsWith('ALERT:')) {
+                        const alertLine = line.substring('ALERT:'.length).trim();
+                        // Extract just the true/false part - handle various formats
+                        const booleanMatch = alertLine.match(/^\s*(true|false)(\s|$|-|\()/i);
+                        if (booleanMatch) {
+                            booleanResult = booleanMatch[1].toLowerCase();
+                        } else {
+                            // Fallback: check if the line contains true/false
+                            const fallbackMatch = alertLine.match(/(true|false)/i);
+                            if (fallbackMatch) {
+                                booleanResult = fallbackMatch[1].toLowerCase();
+                            }
+                        }
+                    }
+                    // Backward compatibility - also check for old format
+                    else if (line.startsWith('DESCRIPTION:')) {
                         description = line.substring('DESCRIPTION:'.length).trim();
                     } else if (line.startsWith('CONDITION_CHECK:')) {
                         const conditionLine = line.substring('CONDITION_CHECK:'.length).trim();
-                        // Extract just the true/false part (before any dash or explanation)
-                        const booleanMatch = conditionLine.match(/^(true|false)/i);
+                        const booleanMatch = conditionLine.match(/^\s*(true|false)(\s|$|-|\()/i);
                         if (booleanMatch) {
                             booleanResult = booleanMatch[1].toLowerCase();
                         }
@@ -360,11 +387,10 @@ CONDITION_CHECK: false - The person is wearing glasses, so the condition "person
                 // Fallback parsing if structured format not found
                 if (!description || !booleanResult) {
                     console.log("Structured format not found, trying fallback parsing...");
-                    
-                    // Try to extract description and boolean from any format
+                      // Try to extract description and boolean from any format
                     if (!description) {
-                        // Use first non-empty line as description
-                        description = lines.length > 0 ? lines[0].replace(/^(DESCRIPTION:|DESC:)/i, '').trim() : 'Scene analysis in progress';
+                        // Use first non-empty line as description, try multiple prefixes
+                        description = lines.length > 0 ? lines[0].replace(/^(SCENE:|DESCRIPTION:|DESC:)/i, '').trim() : 'Scene analysis in progress';
                     }
                     
                     if (!booleanResult) {
@@ -385,19 +411,25 @@ CONDITION_CHECK: false - The person is wearing glasses, so the condition "person
                 }
                 
                 // Update scene description
-                sceneDescription.textContent = description || 'Scene detected but description unavailable';
-                
-                // Handle alert logic
+                sceneDescription.textContent = description || 'Scene detected but description unavailable';                // Handle alert logic
                 if (booleanResult === 'true') {
-                    const alertMessage = `🚨 ALERT: ${alertCondition}`;
+                    const alertMessage = `🚨 DETECTED: ${alertCondition}`;
                     addAlert('warning', alertMessage);
-                    console.log("Alert triggered:", alertCondition);
+                    console.log("ALERT: Condition detected -", alertCondition);
+                    console.log("Scene:", description);
                 } else if (booleanResult === 'false') {
-                    console.log("Condition not met - no alert needed");
+                    console.log("No alert - condition not detected:", alertCondition);
+                    console.log("Scene:", description);
+                    // Add occasional status updates for monitoring confirmation
+                    if (Math.random() < 0.05) { // Show less frequently (5%)
+                        addAlert('info', `✓ Monitoring: ${alertCondition.substring(0, 30)}${alertCondition.length > 30 ? '...' : ''}`);
+                    }
                 } else {
                     // Log the full response for debugging
                     console.log("Could not determine boolean result from:", trimmedText);
-                    addAlert('error', 'Model response format unclear - please check console for details');
+                    console.log("Parsed description:", description);
+                    console.log("Parsed boolean result:", booleanResult);
+                    addAlert('error', 'Model response unclear - check console for details');
                 }
 
             } catch (e) {
