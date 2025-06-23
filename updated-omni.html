@@ -257,15 +257,13 @@ Requirements:
 
 Example response:
 DESCRIPTION: A person wearing safety glasses is sitting at a desk
-CONDITION_CHECK: false - The person is wearing glasses, so the condition "person not wearing glasses" is not met`;            const payload = {
+CONDITION_CHECK: false - The person is wearing glasses, so the condition "person not wearing glasses" is not met`;
+
+            const payload = {
                 "instances": [
                     {
                         "@requestFormat": "chatCompletions",
                         "messages": [
-                            {
-                                "role": "system",
-                                "content": "You are a safety monitoring AI. Always respond in the exact format requested. Be precise and consistent."
-                            },
                             {
                                 "role": "user",
                                 "content": [
@@ -279,9 +277,7 @@ CONDITION_CHECK: false - The person is wearing glasses, so the condition "person
                                 ]
                             }
                         ],
-                        "max_tokens": 200,
-                        "temperature": 0.1,
-                        "top_p": 0.8
+                        "max_tokens": 1600
                     }
                 ]
             };
