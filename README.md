@@ -1,15 +1,366 @@
-# SmolVLM real-time camera demo
+# Real-Time Video Analysis with Vertex AI
 
-![demo](./demo.png)
+A modern web application that performs real-time video analysis using Google Cloud Vertex AI and Firebase hosting. This app captures video from your webcam and sends frames to a deployed AI model for analysis and alerts.
 
-This repository is a simple demo for how to use llama.cpp server with SmolVLM 500M to get real-time object detection
+## 🚀 Features
 
-## How to setup
+- **Real-time video analysis** using your webcam
+- **AI-powered alerts** based on custom conditions
+- **Modern UI** with Tailwind CSS
+- **Configurable analysis intervals** (500ms to 5s)
+- **Firebase hosting** for production deployment
+- **Google Cloud Vertex AI** integration
 
-1. Install [llama.cpp](https://github.com/ggml-org/llama.cpp)
-2. Run `llama-server -hf ggml-org/SmolVLM-500M-Instruct-GGUF`  
-   Note: you may need to add `-ngl 99` to enable GPU (if you are using NVidia/AMD/Intel GPU)  
-   Note (2): You can also try other models [here](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md)
-3. Open `index.html`
-4. Optionally change the instruction (for example, make it returns JSON)
-5. Click on "Start" and enjoy
+## 📋 Prerequisites
+
+### Required Software
+
+1. **Python 3.8+** - [Download from python.org](https://www.python.org/downloads/)
+2. **Node.js and npm** - [Download from nodejs.org](https://nodejs.org/)
+3. **Google Cloud CLI** - [Installation guide](https://cloud.google.com/sdk/docs/install)
+4. **Firebase CLI** - Install globally:
+   ```bash
+   npm install -g firebase-tools
+   ```
+
+### Required Accounts
+
+1. **Google Cloud Account** with billing enabled
+2. **Firebase Project** (can be the same as your Google Cloud project)
+
+## 🛠️ Setup Instructions
+
+### Step 1: Clone and Setup Python Environment
+
+```bash
+# Clone or download this repository
+cd path/to/your/project
+
+# Create and activate Python virtual environment
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# macOS/Linux
+source venv/bin/activate
+
+# Install required packages
+pip install -r requirements.txt
+```
+
+### Step 2: Google Cloud Authentication
+
+```bash
+# Login to Google Cloud
+gcloud auth login
+
+# Set your project (replace with your project ID)
+gcloud config set project YOUR_PROJECT_ID
+
+# Setup application default credentials
+gcloud auth application-default login --project=YOUR_PROJECT_ID
+```
+
+### Step 3: Deploy Vertex AI Model
+
+```bash
+# Run the deployment script
+python deployGCPModels.py
+```
+
+This will:
+- Deploy a Hugging Face model to Vertex AI
+- Create a dedicated endpoint
+- Output the endpoint details you'll need for configuration
+
+**Important**: Save the output values:
+- `ENDPOINT_ID`
+- `PROJECT_NUMBER` 
+- `REGION`
+
+### Step 4: Configure the Web Application
+
+Edit `public/config.js` with your deployment details:
+
+```javascript
+VERTEX_AI: {
+    ENDPOINT_ID: "YOUR_ENDPOINT_ID",     // From deployment output
+    PROJECT_ID: "YOUR_PROJECT_NUMBER",   // Project NUMBER (not string)
+    PROJECT_ID_STRING: "YOUR_PROJECT_ID", // Project ID string
+    REGION: "YOUR_REGION"                // e.g., "asia-southeast1"
+}
+```
+
+### Step 5: Firebase Setup
+
+```bash
+# Login to Firebase
+firebase login
+
+# Initialize Firebase in your project directory
+firebase init hosting
+```
+
+When prompted:
+- **Use an existing project**: Select your Google Cloud project
+- **Public directory**: `public` (default)
+- **Configure as SPA**: `Yes`
+- **Overwrite files**: `No`
+
+Update `.firebaserc` with your project:
+
+```json
+{
+  "projects": {
+    "default": "your-project-id"
+  }
+}
+```
+
+### Step 6: Deploy to Firebase
+
+#### Option A: Using PowerShell Script (Recommended)
+
+```powershell
+.\deploy.ps1
+```
+
+This script will:
+- Check your configuration
+- Verify Firebase project exists
+- Deploy automatically
+- Handle common issues
+
+#### Option B: Manual Deployment
+
+```bash
+firebase deploy
+```
+
+## 🔑 Authentication Setup
+
+### For Development/Testing
+
+Get a fresh access token:
+
+```bash
+# Run the token helper script
+.\get_token.ps1
+
+# Or manually get token
+gcloud auth application-default print-access-token
+```
+
+Copy the token and paste it into the "Access Token" field in the web app.
+
+### For Production
+
+For production use, implement proper authentication:
+
+1. Create a service account with Vertex AI permissions
+2. Use Firebase Authentication
+3. Implement a backend API to proxy Vertex AI calls
+4. Never expose service account keys in frontend code
+
+## 📁 Project Structure
+
+```
+├── public/                 # Frontend files (served by Firebase)
+│   ├── index.html         # Main HTML file
+│   ├── config.js          # Configuration (EDIT THIS!)
+│   └── app.js             # Main application logic
+├── deployGCPModels.py     # Vertex AI deployment script
+├── requirements.txt       # Python dependencies
+├── firebase.json          # Firebase hosting config
+├── .firebaserc           # Firebase project config
+├── deploy.ps1            # Automated deployment script
+├── get_token.ps1         # Token helper script
+├── diagnose_auth.ps1     # Authentication diagnosis
+└── README.md             # This file
+```
+
+## 🎯 Usage
+
+1. **Open the deployed web app** (Firebase will provide the URL)
+2. **Allow camera access** when prompted
+3. **Enter your access token** in the configuration panel
+4. **Set an alert condition** (e.g., "person in frame", "unsafe behavior")
+5. **Click "Start Analysis"** to begin real-time analysis
+6. **Monitor alerts** in the right panel
+
+### Example Alert Conditions
+
+- `"person not wearing helmet"`
+- `"child falling or in danger"`
+- `"vehicle in restricted area"`
+- `"fire or smoke detected"`
+- `"person with weapon"`
+
+## 🔧 Configuration Options
+
+### Analysis Intervals
+
+Choose how often to analyze frames:
+- **500ms**: Very responsive, higher API usage
+- **1s**: Good balance (default)
+- **2-5s**: Less responsive, lower costs
+
+### Environment Detection
+
+The app automatically detects the environment:
+- **Development**: `localhost` - enables debug logging
+- **Production**: Any other domain - minimal logging
+
+### Debug Mode
+
+Enable detailed logging in `config.js`:
+
+```javascript
+DEBUG: {
+    ENABLED: true,  // Set to true for detailed logs
+    LOG_RESPONSES: true
+}
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+#### 1. 403 Permission Errors
+
+```bash
+# Check authentication
+gcloud auth list
+
+# Ensure correct project is set
+gcloud config get-value project
+
+# Re-authenticate if needed
+gcloud auth application-default login --project=YOUR_PROJECT_ID
+```
+
+#### 2. 400 Bad Request Errors
+
+- Check endpoint ID, project number, and region in `config.js`
+- Verify the model expects the correct input format
+- Check the model deployment status in Google Cloud Console
+
+#### 3. CORS Errors
+
+Add your Firebase domain to allowed origins in Google Cloud:
+1. Go to Google Cloud Console → API & Services → Credentials
+2. Edit your OAuth client
+3. Add your Firebase hosting domain to authorized origins
+
+#### 4. Camera Access Issues
+
+- Ensure HTTPS (required for camera access)
+- Check browser permissions
+- Try a different browser
+
+### Diagnostic Tools
+
+Run the authentication diagnosis:
+
+```powershell
+.\diagnose_auth.ps1
+```
+
+Test the endpoint directly:
+
+```powershell
+.\test_endpoint.ps1
+```
+
+## 💰 Cost Considerations
+
+- **Vertex AI**: Charged per prediction request
+- **Firebase Hosting**: Free tier available
+- **Storage**: Minimal for this app
+
+Monitor usage in Google Cloud Console to avoid unexpected charges.
+
+## 🔒 Security Best Practices
+
+1. **Never commit access tokens** to version control
+2. **Use service accounts** for production
+3. **Implement proper authentication** for production apps
+4. **Monitor API usage** to prevent abuse
+5. **Use HTTPS** always (Firebase provides this automatically)
+
+## 📊 Monitoring
+
+Monitor your deployment:
+
+- **Firebase Console**: Hosting metrics and performance
+- **Google Cloud Console**: Vertex AI usage and costs
+- **Browser DevTools**: Debug frontend issues
+
+## 🎨 Customization
+
+### Styling
+
+The app uses Tailwind CSS. Modify classes in `index.html` to customize the appearance.
+
+### Model Integration
+
+To use a different model:
+
+1. Deploy your model to Vertex AI
+2. Update the endpoint configuration in `config.js`
+3. Modify the request format in `app.js` if needed
+
+### Alert Logic
+
+Customize alert conditions in the `analyzeImage()` function in `app.js`.
+
+## 📚 Additional Resources
+
+- [Google Cloud Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
+- [Firebase Hosting Guide](https://firebase.google.com/docs/hosting)
+- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+
+## 🚀 Quick Start Summary
+
+```bash
+# 1. Setup Python environment
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+
+# 2. Authenticate with Google Cloud
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud auth application-default login --project=YOUR_PROJECT_ID
+
+# 3. Deploy Vertex AI model
+python deployGCPModels.py
+
+# 4. Update config.js with deployment details
+
+# 5. Setup Firebase
+firebase login
+firebase init hosting
+
+# 6. Deploy
+.\deploy.ps1
+
+# 7. Get access token and use the app
+.\get_token.ps1
+```
+
+🎉 **Your real-time video analysis app is now live!**
