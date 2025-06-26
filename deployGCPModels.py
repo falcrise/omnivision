@@ -1,7 +1,7 @@
 from google.cloud import aiplatform
 
 # 1. Initialize client
-PROJECT_ID = "falcon-deeptech-ai-stuff"
+PROJECT_ID = "your-firebase-project-id"
 REGION     = "asia-southeast1"
 aiplatform.init(project=PROJECT_ID, location=REGION)
 

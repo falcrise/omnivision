@@ -1,9 +1,9 @@
 // Configuration for Vertex AI Video Analysis App
 window.CONFIG = {    // Vertex AI Configuration
     VERTEX_AI: {
-        ENDPOINT_ID: "3929016840927313920", // Your deployed model endpoint
-        PROJECT_ID: "609216698421",         // Project number (not project ID string)
-        PROJECT_ID_STRING: "falcon-deeptech-ai-stuff", // Project ID string for reference
+        ENDPOINT_ID: "deployedModelEndpoitnId", // Your deployed model endpoint
+        PROJECT_ID: "deployedModelsVertexProjectId",         // Project number (not project ID string)
+        PROJECT_ID_STRING: "your-firebase-project-id", // Project ID string for reference
         REGION: "asia-southeast1",
         
         // This will be constructed automatically from the above values

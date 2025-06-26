@@ -473,7 +473,7 @@ function Get-ProjectIdFromConfig {
             Write-Host "Could not read project ID from config.js" -ForegroundColor Yellow
         }
     }
-    return "falcon-deeptech-ai-stuff"  # fallback
+    return "your-firebase-project-id"  # fallback
 }
 
 # Main script logic

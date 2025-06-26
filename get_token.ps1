@@ -4,9 +4,9 @@ Write-Host ""
 
 # Ensure we're using the correct project
 $currentProject = gcloud config get-value project 2>$null
-if ($currentProject -ne "falcon-deeptech-ai-stuff") {
+if ($currentProject -ne "your-firebase-project-id") {
     Write-Host "Setting correct project..." -ForegroundColor Yellow
-    gcloud config set project falcon-deeptech-ai-stuff
+    gcloud config set project your-firebase-project-id
 }
 
 Write-Host "Getting fresh access token..." -ForegroundColor Yellow
@@ -45,5 +45,5 @@ try {
 } catch {
     Write-Host "✗ Error getting access token: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Try running: gcloud auth application-default login --project=falcon-deeptech-ai-stuff" -ForegroundColor Yellow
+    Write-Host "Try running: gcloud auth application-default login --project=your-firebase-project-id" -ForegroundColor Yellow
 }
