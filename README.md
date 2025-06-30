@@ -5,11 +5,13 @@ A modern web application that performs real-time video analysis using Google Clo
 ## 🚀 Features
 
 - **Real-time video analysis** using your webcam
-- **AI-powered alerts** based on custom conditions
+- **AI-powered alerts** based on custom conditions  
+- **SmolVLM-Instruct (2B)** vision-language model integration
+- **Automated CI/CD** deployment via GitHub Actions
 - **Modern UI** with Tailwind CSS
 - **Configurable analysis intervals** (500ms to 5s)
 - **Firebase hosting** for production deployment
-- **Google Cloud Vertex AI** integration
+- **Google Cloud Vertex AI** integration with auto-scaling
 
 ## 📋 Prerequisites
 
@@ -27,10 +29,35 @@ A modern web application that performs real-time video analysis using Google Clo
 
 1. **Google Cloud Account** with billing enabled
 2. **Firebase Project** (can be the same as your Google Cloud project)
+3. **GitHub Account** for CI/CD automation
 
 ## 🛠️ Setup Instructions
 
-### Step 1: Clone and Setup Python Environment
+### Option A: Automated Setup (Recommended)
+
+#### Step 1: Setup CI/CD Pipeline
+Follow the [GitHub Actions Deployment Guide](.github/DEPLOYMENT_GUIDE.md) to:
+- Create service account with proper permissions
+- Add GitHub secrets for automated deployment
+- Configure staging and production environments
+
+#### Step 2: Deploy Model via GitHub Actions
+1. Go to Actions tab → "Deploy Vertex AI Model"
+2. Click "Run workflow"
+3. Select environment and parameters
+4. Wait for deployment completion
+
+#### Step 3: Update Configuration
+After deployment, update `public/config.js` with the outputs from GitHub Actions.
+
+#### Step 4: Deploy Web App
+```bash
+.\deploy.ps1
+```
+
+### Option B: Manual Setup
+
+#### Step 1: Clone and Setup Python Environment
 
 ```bash
 # Clone or download this repository
@@ -166,18 +193,25 @@ For production use, implement proper authentication:
 ## 📁 Project Structure
 
 ```
-├── public/                 # Frontend files (served by Firebase)
-│   ├── index.html         # Main HTML file
-│   ├── config.js          # Configuration (EDIT THIS!)
-│   └── app.js             # Main application logic
-├── deployGCPModels.py     # Vertex AI deployment script
-├── requirements.txt       # Python dependencies
-├── firebase.json          # Firebase hosting config
-├── .firebaserc           # Firebase project config
-├── deploy.ps1            # Automated deployment script
-├── get_token.ps1         # Token helper script
-├── diagnose_auth.ps1     # Authentication diagnosis
-└── README.md             # This file
+├── .github/
+│   ├── workflows/
+│   │   └── deploy-model.yml      # CI/CD pipeline
+│   ├── configs/
+│   │   ├── staging.yml           # Staging config
+│   │   └── production.yml        # Production config
+│   └── DEPLOYMENT_GUIDE.md       # CI/CD setup guide
+├── public/                       # Frontend files (served by Firebase)
+│   ├── index.html               # Main HTML file
+│   ├── config.js                # Configuration (EDIT THIS!)
+│   └── app.js                   # Main application logic
+├── deployGCPModels.py           # Model deployment script
+├── requirements.txt             # Python dependencies
+├── firebase.json                # Firebase hosting config
+├── .firebaserc                  # Firebase project config
+├── deploy.ps1                   # Automated deployment script
+├── get_token.ps1                # Token helper script
+├── diagnose_auth.ps1            # Authentication diagnosis
+└── README.md                    # This file
 ```
 
 ## 🎯 Usage
@@ -337,6 +371,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🚀 Quick Start Summary
 
+### Option A: Automated CI/CD (Recommended)
+```bash
+# 1. Setup GitHub Secrets (GCP_SA_KEY, GCP_PROJECT_ID)
+# 2. Go to Actions tab → "Deploy Vertex AI Model" → Run workflow
+# 3. Update config.js with deployment outputs
+# 4. Deploy web app
+.\deploy.ps1
+```
+
+### Option B: Manual Setup
 ```bash
 # 1. Setup Python environment
 python -m venv venv && venv\Scripts\activate
