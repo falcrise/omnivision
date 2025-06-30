@@ -257,6 +257,28 @@ DEBUG: {
 }
 ```
 
+### Environment Variables
+
+The deployment script supports several environment variables for customization:
+
+- **`DEBUG`**: Set to `true` to enable detailed logging during deployment
+- **`FORCE_REDEPLOY`**: Set to `true` to force redeployment even if endpoint exists
+- **`SKIP_STATUS_CHECK`**: Set to `true` to skip deployment status verification (useful for Model Garden deployments that don't support status checking)
+- **`PROJECT_ID`**: Override the GCP project ID from configuration
+- **`REGION`**: Override the GCP region from configuration
+
+Example:
+```bash
+# Enable debug mode and skip status check
+set DEBUG=true
+set SKIP_STATUS_CHECK=true
+python deployGCPModels.py staging
+
+# Force redeploy
+set FORCE_REDEPLOY=true
+python deployGCPModels.py production
+```
+
 ## 🚨 Troubleshooting
 
 ### Common Issues
