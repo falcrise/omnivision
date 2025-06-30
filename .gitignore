@@ -128,3 +128,4 @@ Thumbs.db
 
 # References and documentation
 references/
+.github/configs/ghSecret.ps1
