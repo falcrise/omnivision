@@ -1,0 +1,233 @@
+# GitHub Actions Workflow for Vertex AI Model Deployment
+# 
+# MANUAL EXECUTION:
+# 1. Go to Actions tab in GitHub repository
+# 2. Select "Deploy Vertex AI Model" workflow
+# 3. Click "Run workflow" button
+# 4. Configure parameters:
+#    - Model: SmolVLM-Instruct (recommended) or custom
+#    - Machine: g2-standard-12 (recommended for production)
+#    - Replicas: 1-3 (adjust based on expected load)
+#    - Environment: staging (testing) or production
+#    - Force Redeploy: true to replace existing endpoint
+# 5. Click "Run workflow" to start deployment
+#
+# AUTOMATIC EXECUTION:
+# - Triggers on push to main branch when deployment files change
+# - Uses staging environment with default settings
+#
+# REQUIREMENTS:
+# - GitHub Secrets: GCP_SA_KEY, GCP_PROJECT_ID
+# - Service Account with Vertex AI Admin permissions
+#
+name: Deploy Vertex AI Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_name:
+        description: 'Model to deploy'
+        required: true
+        default: 'smolvlm-instruct'
+        type: choice
+        options:
+          - smolvlm-instruct
+          - custom
+      machine_type:
+        description: 'Machine type (CPU/RAM/GPU configuration)'
+        required: true
+        default: 'g2-standard-12'
+        type: choice
+        options:
+          - g2-standard-4   # 4 vCPU, 16GB RAM, 1x L4
+          - g2-standard-8   # 8 vCPU, 32GB RAM, 1x L4
+          - g2-standard-12  # 12 vCPU, 48GB RAM, 1x L4 (Recommended)
+          - g2-standard-16  # 16 vCPU, 64GB RAM, 1x L4
+      min_replicas:
+        description: 'Minimum replicas (always running)'
+        required: true
+        default: '1'
+        type: string
+      max_replicas:
+        description: 'Maximum replicas (auto-scale limit)'
+        required: true
+        default: '3'
+        type: string
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging     # Lower cost, debug logging
+          - production  # High availability, optimized
+      force_redeploy:
+        description: 'Force redeploy even if endpoint exists'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'deployGCPModels.py'
+      - '.github/workflows/deploy-model.yml'
+
+env:
+  PYTHON_VERSION: '3.10'
+  GCP_REGION: 'asia-southeast1'
+
+jobs:
+  deploy-model:
+    name: Deploy Vertex AI Model
+    runs-on: ubuntu-latest
+    
+    # Security: Only allow deployment from main branch or manual trigger
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: 'latest'
+        
+    - name: Verify GCP Authentication
+      run: |
+        gcloud auth list
+        gcloud config list project
+        
+    - name: Set deployment parameters
+      id: params
+      run: |
+        # Set defaults for push events, use inputs for manual triggers
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "MODEL_NAME=${{ github.event.inputs.model_name }}" >> $GITHUB_OUTPUT
+          echo "MACHINE_TYPE=${{ github.event.inputs.machine_type }}" >> $GITHUB_OUTPUT
+          echo "MIN_REPLICAS=${{ github.event.inputs.min_replicas }}" >> $GITHUB_OUTPUT
+          echo "MAX_REPLICAS=${{ github.event.inputs.max_replicas }}" >> $GITHUB_OUTPUT
+          echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          echo "FORCE_REDEPLOY=${{ github.event.inputs.force_redeploy }}" >> $GITHUB_OUTPUT
+        else
+          echo "MODEL_NAME=smolvlm-instruct" >> $GITHUB_OUTPUT
+          echo "MACHINE_TYPE=g2-standard-12" >> $GITHUB_OUTPUT
+          echo "MIN_REPLICAS=1" >> $GITHUB_OUTPUT
+          echo "MAX_REPLICAS=3" >> $GITHUB_OUTPUT
+          echo "ENVIRONMENT=staging" >> $GITHUB_OUTPUT
+          echo "FORCE_REDEPLOY=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Display selected configuration
+        echo "🚀 Deployment Configuration:"
+        echo "  Model: ${{ github.event.inputs.model_name || 'smolvlm-instruct' }}"
+        echo "  Machine: ${{ github.event.inputs.machine_type || 'g2-standard-12' }}"
+        echo "  Replicas: ${{ github.event.inputs.min_replicas || '1' }}-${{ github.event.inputs.max_replicas || '3' }}"
+        echo "  Environment: ${{ github.event.inputs.environment || 'staging' }}"
+        echo "  Force Redeploy: ${{ github.event.inputs.force_redeploy || 'false' }}"
+        
+    - name: Deploy Vertex AI Model
+      env:
+        PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        REGION: ${{ env.GCP_REGION }}
+        MODEL_NAME: ${{ steps.params.outputs.MODEL_NAME }}
+        MACHINE_TYPE: ${{ steps.params.outputs.MACHINE_TYPE }}
+        MIN_REPLICAS: ${{ steps.params.outputs.MIN_REPLICAS }}
+        MAX_REPLICAS: ${{ steps.params.outputs.MAX_REPLICAS }}
+        ENVIRONMENT: ${{ steps.params.outputs.ENVIRONMENT }}
+        FORCE_REDEPLOY: ${{ steps.params.outputs.FORCE_REDEPLOY }}
+      run: |
+        echo "🚀 Starting Vertex AI Model Deployment..."
+        echo "Configuration: $MODEL_NAME on $MACHINE_TYPE ($MIN_REPLICAS-$MAX_REPLICAS replicas) in $ENVIRONMENT"
+        python deployGCPModels.py
+        
+    - name: Save deployment outputs
+      run: |
+        # Create outputs directory if it doesn't exist
+        mkdir -p deployment-outputs
+        
+        # Save deployment information
+        echo "Deployment completed at: $(date)" > deployment-outputs/deployment-info.txt
+        echo "Model: ${{ steps.params.outputs.MODEL_NAME }}" >> deployment-outputs/deployment-info.txt
+        echo "Environment: ${{ steps.params.outputs.ENVIRONMENT }}" >> deployment-outputs/deployment-info.txt
+        echo "Machine Type: ${{ steps.params.outputs.MACHINE_TYPE }}" >> deployment-outputs/deployment-info.txt
+        echo "Replicas: ${{ steps.params.outputs.MIN_REPLICAS }}-${{ steps.params.outputs.MAX_REPLICAS }}" >> deployment-outputs/deployment-info.txt
+        
+        # If deployment_outputs.json exists, save it as artifact
+        if [ -f "deployment_outputs.json" ]; then
+          cp deployment_outputs.json deployment-outputs/
+        fi
+        
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-outputs-${{ github.run_number }}
+        path: deployment-outputs/
+        retention-days: 30
+        
+    - name: Post deployment summary
+      run: |
+        echo "## 🚀 Vertex AI Model Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Deployment Details" >> $GITHUB_STEP_SUMMARY
+        echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Model | ${{ steps.params.outputs.MODEL_NAME }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Environment | ${{ steps.params.outputs.ENVIRONMENT }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Machine Type | ${{ steps.params.outputs.MACHINE_TYPE }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Replicas | ${{ steps.params.outputs.MIN_REPLICAS }}-${{ steps.params.outputs.MAX_REPLICAS }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Region | ${{ env.GCP_REGION }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Project | ${{ secrets.GCP_PROJECT_ID }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Trigger | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. **Download Artifacts**: Get deployment outputs from the artifacts section below" >> $GITHUB_STEP_SUMMARY
+        echo "2. **Update Config**: Use the endpoint details to update your \`public/config.js\`" >> $GITHUB_STEP_SUMMARY
+        echo "3. **Deploy Web App**: Run \`./deploy.ps1\` to deploy your Firebase app" >> $GITHUB_STEP_SUMMARY
+        echo "4. **Test Endpoint**: Use \`./get_token.ps1\` to get access token for testing" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Deployment completed successfully!**" >> $GITHUB_STEP_SUMMARY
+        
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: deploy-model
+    if: failure()
+    
+    steps:
+    - name: Notify failure
+      run: |
+        echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "The Vertex AI model deployment has failed. Please check the logs above for details." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Common issues:**" >> $GITHUB_STEP_SUMMARY
+        echo "- Invalid GCP credentials" >> $GITHUB_STEP_SUMMARY
+        echo "- Insufficient permissions" >> $GITHUB_STEP_SUMMARY
+        echo "- Resource quota exceeded" >> $GITHUB_STEP_SUMMARY
+        echo "- Invalid configuration parameters" >> $GITHUB_STEP_SUMMARY
