@@ -128,4 +128,7 @@ Thumbs.db
 
 # References and documentation
 references/
+
+# GitHub secret setup scripts (may contain sensitive info)
 .github/configs/ghSecret.ps1
+.github/configs/ghsecret.sh
