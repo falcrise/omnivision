@@ -375,7 +375,7 @@ class VertexAIModelGardenDeployer:
             
         return outputs
 
-    def _print_deployment_summary(self, outputs: Dict[str, Any]):
+    def deploy_complete_pipeline(self):
         """Deploy Model Garden pipeline."""
         try:
             model, endpoint = self.deploy_model_garden_model()
@@ -385,7 +385,7 @@ class VertexAIModelGardenDeployer:
         except Exception as e:
             logger.error(f"❌ Deployment failed: {str(e)}")
             raise
-            
+
     def _print_deployment_summary(self, outputs: Dict[str, Any]):
         """Print deployment summary."""
         print("\n" + "="*60)
@@ -415,9 +415,9 @@ def main():
             github_output = os.getenv('GITHUB_OUTPUT')
             if github_output:
                 with open(github_output, 'a') as f:
-                    f.write(f"endpoint_id={outputs['api_config']['endpoint_id']}\n")
+                    f.write(f"endpoint_id={outputs['config_js']['ENDPOINT_ID']}\n")
                     f.write(f"model_display_name={outputs['model']['display_name']}\n")
-                    f.write(f"api_endpoint={outputs['api_config']['api_endpoint']}\n")
+                    f.write(f"api_endpoint={outputs['config_js']['API_ENDPOINT']}\n")
                 
     except Exception as e:
         logger.error(f"Deployment failed: {str(e)}")
