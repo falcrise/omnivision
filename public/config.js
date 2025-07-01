@@ -1,19 +1,25 @@
 // Configuration for Vertex AI Video Analysis App
 window.CONFIG = {    // Vertex AI Configuration
     VERTEX_AI: {
-        ENDPOINT_ID: "deployedModelEndpoitnId", // Your deployed model endpoint
-        PROJECT_ID: "deployedModelsVertexProjectId",         // Project number (not project ID string)
+        ENDPOINT_ID: "deployedModelEndpoitnId", // Your deployed model endpoint ID (numeric)
+        PROJECT_ID: "deployedModelsVertexProjectId",         // Project NUMBER (not project ID string)
         PROJECT_ID_STRING: "your-firebase-project-id", // Project ID string for reference
         REGION: "asia-southeast1",
         
         // This will be constructed automatically from the above values
+        // Format: ENDPOINT_ID.REGION-PROJECT_NUMBER.prediction.vertexai.goog
         get DEDICATED_ENDPOINT_DOMAIN() {
             return `${this.ENDPOINT_ID}.${this.REGION}-${this.PROJECT_ID}.prediction.vertexai.goog`;
         },
         
-        // API endpoint constructed from the domain
+        // API endpoint for Model Garden dedicated endpoints
         get API_ENDPOINT() {
             return `https://${this.DEDICATED_ENDPOINT_DOMAIN}/v1/projects/${this.PROJECT_ID}/locations/${this.REGION}/endpoints/${this.ENDPOINT_ID}:predict`;
+        },
+        
+        // Alternative standard API endpoint (fallback)
+        get STANDARD_API_ENDPOINT() {
+            return `https://${this.REGION}-aiplatform.googleapis.com/v1/projects/${this.PROJECT_ID}/locations/${this.REGION}/endpoints/${this.ENDPOINT_ID}:predict`;
         }
     },
     

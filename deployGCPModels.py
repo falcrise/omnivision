@@ -215,17 +215,18 @@ class VertexAIModelGardenDeployer:
             # Create Model Garden model
             model = model_garden.OpenModel(model_config['huggingface_id'])
             
-            # Generate unique deployment names
+            # Generate unique deployment names (simplified format like Google's sample)
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            endpoint_name = f"{model_config['name']}-endpoint-{timestamp}"
+            endpoint_name = f"{model_config['name']}-mg-endpoint-{timestamp}"
             model_display_name = f"{model_config['name']}-{timestamp}"
             
             logger.info("Starting model deployment...")
             logger.info(f"Endpoint name: {endpoint_name}")
             logger.info(f"Model display name: {model_display_name}")
             
-            # Deploy the model with proper error handling
+            # Deploy the model using exact Google sample format
             try:
+                logger.info("🚀 Deploying with Model Garden API...")
                 endpoint = model.deploy(
                     accept_eula=True,
                     machine_type=deployment_config['machine_type'],
@@ -233,34 +234,17 @@ class VertexAIModelGardenDeployer:
                     accelerator_count=accelerator_count,
                     endpoint_display_name=endpoint_name,
                     model_display_name=model_display_name,
-                    use_dedicated_endpoint=True,
-                    min_replica_count=deployment_config['min_replica_count'],
-                    max_replica_count=deployment_config['max_replica_count']
+                    use_dedicated_endpoint=True
                 )
                 
-                logger.info("✅ Model Garden deployment call completed successfully!")
-                
-                # Check if we should skip status checking (useful for Model Garden deployments)
-                skip_status_check = os.getenv('SKIP_STATUS_CHECK', 'false').lower() == 'true'
-                
-                if skip_status_check:
-                    logger.info("💡 Skipping deployment status check (SKIP_STATUS_CHECK=true)")
-                    logger.info("✅ Assuming deployment is successful based on successful deploy() call")
-                else:
-                    # Wait for deployment to complete
-                    if not self._wait_for_deployment(endpoint):
-                        logger.warning("⚠️ Deployment status check failed, but deploy() call succeeded")
-                        logger.info("💡 You can set SKIP_STATUS_CHECK=true to skip status verification")
-                        # Don't raise an exception here since the deploy() call succeeded
-                    
+                logger.info("✅ Model Garden deployment call completed!")
                 return model, endpoint
                 
             except Exception as deploy_error:
+                error_msg = str(deploy_error).lower()
                 logger.error(f"❌ Model deployment failed: {str(deploy_error)}")
                 
-                # Enhanced error handling for common issues
-                error_msg = str(deploy_error).lower()
-                
+                # Enhanced error handling for common Model Garden issues
                 if "already exists" in error_msg:
                     if not force_redeploy:
                         logger.info("💡 Model/endpoint already exists. Set FORCE_REDEPLOY=true to redeploy.")
@@ -281,6 +265,21 @@ class VertexAIModelGardenDeployer:
                     logger.error("🔍 Endpoint filtering error detected.")
                     logger.error("💡 This may be due to endpoint labeling issues in Model Garden.")
                     
+                elif "model server exited unexpectedly" in error_msg:
+                    logger.error("🔥 Model server crashed during startup!")
+                    logger.error("💡 Common causes:")
+                    logger.error("   - Insufficient GPU memory for the model")
+                    logger.error("   - Incompatible machine type/accelerator combination")
+                    logger.error("   - Model initialization timeout")
+                    logger.error("💡 Solutions:")
+                    logger.error("   - Try a larger machine type (g2-standard-16)")
+                    logger.error("   - Use a different accelerator type")
+                    logger.error("   - Check model server logs in Google Cloud Console")
+                    
+                elif "400" in error_msg or "bad request" in error_msg:
+                    logger.error("📋 Bad request error - likely configuration issue")
+                    logger.error("💡 Check that all parameters are valid for Model Garden deployment")
+                    
                 raise deploy_error
                 
         except Exception as e:
@@ -292,8 +291,14 @@ class VertexAIModelGardenDeployer:
         try:
             logger.info("🔍 Searching for existing endpoints...")
             
-            # List all endpoints
-            endpoints = aiplatform.Endpoint.list()
+            # For Model Garden, we need to be more careful with endpoint listing
+            # to avoid the filter error
+            try:
+                endpoints = aiplatform.Endpoint.list()
+            except Exception as list_error:
+                logger.warning(f"⚠️ Could not list endpoints (this is common with Model Garden): {str(list_error)}")
+                logger.info("💡 Skipping existing endpoint search due to API limitations")
+                raise Exception("Cannot search for existing endpoints due to API limitations")
             
             # Look for endpoints related to our model
             model_name = model_config['name']
@@ -318,174 +323,86 @@ class VertexAIModelGardenDeployer:
             raise
             
     def save_deployment_outputs(self, model, endpoint):
-        """Save deployment outputs for use in other applications."""
-        # Get endpoint details safely
+        """Save deployment outputs for Model Garden endpoints."""
         try:
-            if hasattr(endpoint, 'name') and endpoint.name:
-                endpoint_id = endpoint.name.split('/')[-1]
-                endpoint_resource_name = endpoint.name
-            else:
-                # Fallback for cases where endpoint.name might not be available
-                endpoint_id = getattr(endpoint, 'resource_name', 'unknown').split('/')[-1]
-                endpoint_resource_name = getattr(endpoint, 'resource_name', f"projects/{self.project_id}/locations/{self.region}/endpoints/unknown")
-        except Exception as e:
-            logger.warning(f"Could not extract endpoint ID properly: {str(e)}")
+            endpoint_id = endpoint.name.split('/')[-1]
+            endpoint_resource_name = endpoint.name
+        except:
             endpoint_id = "unknown"
             endpoint_resource_name = f"projects/{self.project_id}/locations/{self.region}/endpoints/unknown"
         
-        # Get accelerator configuration
+        # Extract project number from resource name
+        try:
+            import re
+            project_number_match = re.search(r'/projects/(\d+)/', endpoint_resource_name)
+            project_number = project_number_match.group(1) if project_number_match else self.project_id
+        except:
+            project_number = self.project_id
+            
+        # Model Garden dedicated endpoint domain
+        dedicated_endpoint_domain = f"{endpoint_id}.{self.region}-{project_number}.prediction.vertexai.goog"
+        
         accelerator_type, accelerator_count = self._get_accelerator_config(self.config['deployment']['machine_type'])
         
         outputs = {
             "deployment_info": {
                 "timestamp": datetime.now().isoformat(),
-                "environment": os.getenv('ENVIRONMENT', 'staging'),
                 "project_id": self.project_id,
-                "region": self.region,
-                "deployment_method": "model_garden"
+                "project_number": project_number,
+                "region": self.region
             },
             "model": {
                 "huggingface_id": self.config['model']['huggingface_id'],
-                "display_name": self.config['model']['name'],
-                "type": "model_garden_open_model"
+                "display_name": self.config['model']['name']
             },
             "endpoint": {
                 "endpoint_id": endpoint_id,
-                "display_name": getattr(endpoint, 'display_name', f"{self.config['model']['name']}-endpoint"),
-                "resource_name": endpoint_resource_name
+                "resource_name": endpoint_resource_name,
+                "dedicated_endpoint_domain": dedicated_endpoint_domain
             },
-            "api_config": {
-                "endpoint_id": endpoint_id,
-                "project_id": self.project_id,
-                "region": self.region,
-                "api_endpoint": f"https://{self.region}-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/{self.region}/endpoints/{endpoint_id}:predict"
-            },
-            "configuration": {
-                "machine_type": self.config['deployment']['machine_type'],
-                "accelerator_type": accelerator_type,
-                "accelerator_count": accelerator_count,
-                "min_replicas": self.config['deployment']['min_replica_count'],
-                "max_replicas": self.config['deployment']['max_replica_count']
+            "config_js": {
+                "ENDPOINT_ID": endpoint_id,
+                "PROJECT_ID": project_number,
+                "PROJECT_ID_STRING": self.project_id,
+                "REGION": self.region,
+                "DEDICATED_ENDPOINT_DOMAIN": dedicated_endpoint_domain,
+                "API_ENDPOINT": f"https://{dedicated_endpoint_domain}/v1/projects/{project_number}/locations/{self.region}/endpoints/{endpoint_id}:predict"
             }
         }
         
-        # Save to JSON file
         with open('deployment_outputs.json', 'w') as f:
             json.dump(outputs, f, indent=2)
             
-        logger.info("Deployment outputs saved to deployment_outputs.json")
         return outputs
 
-    def verify_endpoint_deployment(self, endpoint):
-        """Verify that the endpoint is properly deployed and accessible."""
+    def _print_deployment_summary(self, outputs: Dict[str, Any]):
+        """Deploy Model Garden pipeline."""
         try:
-            logger.info("🔍 Verifying endpoint deployment...")
-            
-            # Refresh endpoint to get latest state
-            endpoint.refresh()
-            
-            # Check endpoint state
-            logger.info(f"Endpoint name: {endpoint.display_name}")
-            logger.info(f"Endpoint ID: {endpoint.name.split('/')[-1] if hasattr(endpoint, 'name') else 'unknown'}")
-            
-            # Check deployed models
-            if hasattr(endpoint, 'deployed_models') and endpoint.deployed_models:
-                for i, deployed_model in enumerate(endpoint.deployed_models):
-                    logger.info(f"Deployed model {i+1}:")
-                    logger.info(f"  Display name: {deployed_model.display_name}")
-                    logger.info(f"  State: {deployed_model.state}")
-                    logger.info(f"  Machine type: {deployed_model.machine_spec.machine_type}")
-                    
-                    if hasattr(deployed_model.machine_spec, 'accelerator_type'):
-                        logger.info(f"  Accelerator: {deployed_model.machine_spec.accelerator_type}")
-                        logger.info(f"  Accelerator count: {deployed_model.machine_spec.accelerator_count}")
-                        
-                return True
-            else:
-                logger.warning("⚠️ No deployed models found on endpoint")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Error verifying endpoint: {str(e)}")
-            return False
-        
-    def deploy_complete_pipeline(self):
-        """Deploy the complete pipeline using Model Garden with enhanced error handling."""
-        try:
-            logger.info("🚀 Starting complete Model Garden deployment pipeline...")
-            
-            # Deploy model using Model Garden
             model, endpoint = self.deploy_model_garden_model()
-            
-            # Verify deployment
-            if not self.verify_endpoint_deployment(endpoint):
-                logger.warning("⚠️ Endpoint verification failed, but continuing...")
-            
-            # Save outputs
             outputs = self.save_deployment_outputs(model, endpoint)
-            
-            # Print summary
             self._print_deployment_summary(outputs)
-            
-            logger.info("✅ Complete deployment pipeline finished successfully!")
             return outputs
-            
         except Exception as e:
-            logger.error(f"❌ Deployment pipeline failed: {str(e)}")
-            logger.error("🔍 Common solutions:")
-            logger.error("1. Check service account permissions (Vertex AI Admin role)")
-            logger.error("2. Verify project quota for GPU resources")
-            logger.error("3. Try a different machine type or region")
-            logger.error("4. Set FORCE_REDEPLOY=true if endpoint already exists")
+            logger.error(f"❌ Deployment failed: {str(e)}")
             raise
             
     def _print_deployment_summary(self, outputs: Dict[str, Any]):
-        """Print a formatted deployment summary."""
-        print("\n" + "="*80)
-        print("🚀 VERTEX AI MODEL GARDEN DEPLOYMENT SUCCESSFUL!")
-        print("="*80)
-        print(f"Environment: {outputs['deployment_info']['environment']}")
-        print(f"Project: {outputs['deployment_info']['project_id']}")
+        """Print deployment summary."""
+        print("\n" + "="*60)
+        print("🚀 MODEL GARDEN DEPLOYMENT SUCCESSFUL!")
+        print("="*60)
         print(f"Region: {outputs['deployment_info']['region']}")
-        print(f"Timestamp: {outputs['deployment_info']['timestamp']}")
-        print(f"Method: {outputs['deployment_info']['deployment_method']}")
+        print(f"Endpoint ID: {outputs['endpoint']['endpoint_id']}")
+        print(f"Domain: {outputs['endpoint']['dedicated_endpoint_domain']}")
         print()
-        print("📊 Model Information:")
-        print(f"  Hugging Face ID: {outputs['model']['huggingface_id']}")
-        print(f"  Display Name: {outputs['model']['display_name']}")
-        print(f"  Type: {outputs['model']['type']}")
-        print()
-        print("🌐 Endpoint Information:")
-        print(f"  Endpoint ID: {outputs['endpoint']['endpoint_id']}")
-        print(f"  Display Name: {outputs['endpoint']['display_name']}")
-        print(f"  Resource: {outputs['endpoint']['resource_name']}")
-        print()
-        print("⚙️  Configuration:")
-        print(f"  Machine Type: {outputs['configuration']['machine_type']}")
-        print(f"  GPU: {outputs['configuration']['accelerator_type']} x{outputs['configuration']['accelerator_count']}")
-        print(f"  Replicas: {outputs['configuration']['min_replicas']}-{outputs['configuration']['max_replicas']}")
-        print()
-        print("🔧 API Configuration:")
-        print(f"  Endpoint ID: {outputs['api_config']['endpoint_id']}")
-        print(f"  Project ID: {outputs['api_config']['project_id']}")
-        print(f"  Region: {outputs['api_config']['region']}")
-        print(f"  API Endpoint: {outputs['api_config']['api_endpoint']}")
-        print()
-        print("📋 Config.js Update:")
-        print("// Update your public/config.js with these values:")
-        print(f"const VERTEX_AI_CONFIG = {{")
-        print(f"  PROJECT_ID: '{outputs['api_config']['project_id']}',")
-        print(f"  REGION: '{outputs['api_config']['region']}',")
-        print(f"  ENDPOINT_ID: '{outputs['api_config']['endpoint_id']}',")
-        print(f"  API_ENDPOINT: '{outputs['api_config']['api_endpoint']}'")
-        print(f"}};")
-        print()
-        print("📋 Next Steps:")
-        print("1. Update your application's config.js with the above values")
-        print("2. Test the endpoint with a sample prediction")
-        print("3. Monitor the deployment in the Google Cloud Console")
-        print("4. Check Vertex AI Model Garden for deployment status")
-        print("="*80)
+        print("� UPDATE CONFIG.JS:")
+        print("VERTEX_AI: {")
+        print(f"  ENDPOINT_ID: '{outputs['config_js']['ENDPOINT_ID']}',")
+        print(f"  PROJECT_ID: '{outputs['config_js']['PROJECT_ID']}',")
+        print(f"  PROJECT_ID_STRING: '{outputs['config_js']['PROJECT_ID_STRING']}',")
+        print(f"  REGION: '{outputs['config_js']['REGION']}',")
+        print("}")
+        print("="*60)
 
 def main():
     """Main function to run the deployment."""
