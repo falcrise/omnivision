@@ -27,6 +27,24 @@ class VertexAIModelGardenDeployer:
         # Initialize Vertex AI
         vertexai.init(project=self.project_id, location=self.region)
         logger.info(f"Initialized Vertex AI for project: {self.project_id}, region: {self.region}")
+        logger.info(f"🌍 Selected region: {self.region}")
+        
+        # Log region-specific information
+        region_info = {
+            'us-central1': 'Iowa, USA - Lowest latency for US users',
+            'us-east1': 'South Carolina, USA - Good for East Coast',
+            'us-west1': 'Oregon, USA - Good for West Coast',
+            'europe-west1': 'Belgium, Europe - Good for European users',
+            'europe-west4': 'Netherlands, Europe - Alternative EU region',
+            'asia-southeast1': 'Singapore, Asia - Recommended for Asia-Pacific',
+            'asia-northeast1': 'Tokyo, Japan - Good for Japan/Korea',
+            'asia-south1': 'Mumbai, India - Good for South Asia'
+        }
+        
+        if self.region in region_info:
+            logger.info(f"📍 Region details: {region_info[self.region]}")
+        else:
+            logger.info(f"📍 Using custom region: {self.region}")
         
     def _load_configuration(self, config_path: Optional[str] = None) -> Dict[str, Any]:
         """Load configuration from environment and config files."""
@@ -54,7 +72,15 @@ class VertexAIModelGardenDeployer:
         # GCP settings
         if 'gcp' not in config:
             config['gcp'] = {}
-        config['gcp']['region'] = os.getenv('REGION', config['gcp'].get('region', 'asia-southeast1'))
+        
+        original_region = config['gcp'].get('region', 'asia-southeast1')
+        config['gcp']['region'] = os.getenv('REGION', original_region)
+        
+        # Log region selection
+        if os.getenv('REGION'):
+            logger.info(f"🌍 Region overridden by environment variable: {config['gcp']['region']}")
+        else:
+            logger.info(f"🌍 Using region from config: {config['gcp']['region']}")
         
         # Model settings
         if 'model' not in config:

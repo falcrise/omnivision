@@ -3,7 +3,7 @@ name: production-config
 
 gcp:
   project_id: "falcon-deeptech-ai-stuff"  # Update with your production project
-  region: "asia-southeast1"
+  region: "asia-southeast1"  # Available regions: us-central1, us-east1, us-west1, europe-west1, europe-west4, asia-southeast1, asia-northeast1, asia-south1
   
 model:
   name: "smolvlm-instruct"

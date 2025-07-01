@@ -44,7 +44,21 @@ Follow the [GitHub Actions Deployment Guide](.github/DEPLOYMENT_GUIDE.md) to:
 #### Step 2: Deploy Model via GitHub Actions
 1. Go to Actions tab → "Deploy Vertex AI Model"
 2. Click "Run workflow"
-3. Select environment and parameters
+3. Select parameters:
+   - **Model**: SmolVLM-Instruct (recommended)
+   - **Machine Type**: g2-standard-12 (recommended for production)
+   - **Replicas**: 1-3 (adjust based on expected load)
+   - **Environment**: staging (testing) or production
+   - **Region**: Select closest region for optimal performance:
+     - `us-central1` - Iowa, USA (lowest latency for US)
+     - `us-east1` - South Carolina, USA
+     - `us-west1` - Oregon, USA
+     - `europe-west1` - Belgium, Europe
+     - `europe-west4` - Netherlands, Europe
+     - `asia-southeast1` - Singapore, Asia (recommended for Asia-Pacific)
+     - `asia-northeast1` - Tokyo, Japan
+     - `asia-south1` - Mumbai, India
+   - **Force Redeploy**: Enable to replace existing endpoints
 4. Wait for deployment completion
 
 #### Step 3: Update Configuration
