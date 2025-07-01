@@ -214,30 +214,23 @@ class VertexAIModelGardenDeployer:
         try:
             # Create Model Garden model
             model = model_garden.OpenModel(model_config['huggingface_id'])
+            logger.info(f"✅ Created Model Garden model: {model_config['huggingface_id']}")
             
-            # Generate unique deployment names (simplified format like Google's sample)
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            endpoint_name = f"{model_config['name']}-mg-endpoint-{timestamp}"
-            model_display_name = f"{model_config['name']}-{timestamp}"
-            
-            logger.info("Starting model deployment...")
-            logger.info(f"Endpoint name: {endpoint_name}")
-            logger.info(f"Model display name: {model_display_name}")
-            
-            # Deploy the model using exact Google sample format
+            # Deploy the model using Model Garden API
             try:
                 logger.info("🚀 Deploying with Model Garden API...")
+                logger.info("📋 Model Garden will create the endpoint automatically")
+                
                 endpoint = model.deploy(
                     accept_eula=True,
                     machine_type=deployment_config['machine_type'],
                     accelerator_type=accelerator_type,
                     accelerator_count=accelerator_count,
-                    endpoint_display_name=endpoint_name,
-                    model_display_name=model_display_name,
                     use_dedicated_endpoint=True
                 )
                 
                 logger.info("✅ Model Garden deployment call completed!")
+                logger.info(f"📋 Endpoint created: {endpoint.resource_name}")
                 return model, endpoint
                 
             except Exception as deploy_error:
@@ -325,24 +318,23 @@ class VertexAIModelGardenDeployer:
     def save_deployment_outputs(self, model, endpoint):
         """Save deployment outputs for Model Garden endpoints."""
         try:
-            endpoint_id = endpoint.name.split('/')[-1]
-            endpoint_resource_name = endpoint.name
+            # Extract endpoint ID from resource name
+            endpoint_id = endpoint.resource_name.split('/')[-1]
+            logger.info(f"📋 Endpoint ID: {endpoint_id}")
         except:
             endpoint_id = "unknown"
-            endpoint_resource_name = f"projects/{self.project_id}/locations/{self.region}/endpoints/unknown"
         
-        # Extract project number from resource name
+        # Extract project number from resource name  
         try:
             import re
-            project_number_match = re.search(r'/projects/(\d+)/', endpoint_resource_name)
+            project_number_match = re.search(r'/projects/(\d+)/', endpoint.resource_name)
             project_number = project_number_match.group(1) if project_number_match else self.project_id
+            logger.info(f"📋 Project Number: {project_number}")
         except:
             project_number = self.project_id
             
         # Model Garden dedicated endpoint domain
         dedicated_endpoint_domain = f"{endpoint_id}.{self.region}-{project_number}.prediction.vertexai.goog"
-        
-        accelerator_type, accelerator_count = self._get_accelerator_config(self.config['deployment']['machine_type'])
         
         outputs = {
             "deployment_info": {
@@ -357,7 +349,7 @@ class VertexAIModelGardenDeployer:
             },
             "endpoint": {
                 "endpoint_id": endpoint_id,
-                "resource_name": endpoint_resource_name,
+                "resource_name": endpoint.resource_name,
                 "dedicated_endpoint_domain": dedicated_endpoint_domain
             },
             "config_js": {
