@@ -66,35 +66,27 @@
             </div>
         </div>
 
-        <!-- Right Side: Configuration and Alerts -->
+        <!-- Right Side: Analysis Results -->
         <div class="flex-1 bg-gray-800 rounded-lg shadow-xl p-6 flex flex-col">
-            <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Configuration & Alerts</h2>
+            <h2 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Scene Analysis</h2>
             
             <div class="space-y-4 mb-6">
-                 <div>
-                    <label for="alert-condition" class="block text-sm font-medium text-gray-300 mb-1">What to alert for?</label>
-                    <textarea id="alert-condition" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 h-20 resize-none" placeholder="e.g., person not wearing helmet, child falling, unsafe behavior"></textarea>
-                    <div class="flex items-center mt-2 gap-2">
-                        <input type="checkbox" id="dynamicAlertCheck" class="text-cyan-500 focus:ring-cyan-500 focus:ring-2">
-                        <label for="dynamicAlertCheck" class="text-sm text-gray-300">Allow dynamic alert condition updates while running</label>
-                    </div>
-                </div>
-                 <div>
+                <div>
                     <label for="accessToken" class="block text-sm font-medium text-gray-300 mb-1">Vertex AI Access Token</label>
                     <input type="password" id="accessToken" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500" placeholder="Enter your gcloud auth token">
                 </div>
             </div>
 
             <div class="flex-grow bg-gray-900/50 rounded-md p-4 flex flex-col">
-                 <div class="flex justify-between items-center mb-2">
-                    <h3 class="font-semibold text-lg">Alerts</h3>
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-semibold text-lg">Scene Description</h3>
                     <div id="status-indicator" class="flex items-center gap-2">
                         <span id="status-text" class="text-gray-400">Idle</span>
                         <div id="loader" class="loader hidden"></div>
                     </div>
                 </div>
-                <div id="alerts-container" class="h-64 overflow-y-auto space-y-3 pr-2">
-                   <!-- Alerts will be injected here -->
+                <div id="analysis-results" class="h-64 overflow-y-auto space-y-3 pr-2 bg-gray-800/50 rounded-md p-3">
+                    <div class="text-gray-400 text-center">Start analysis to see scene descriptions...</div>
                 </div>
             </div>
         </div>

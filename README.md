@@ -165,6 +165,184 @@ This script will:
 firebase deploy
 ```
 
+## 🔥 Firebase Deployment
+
+### Firebase Setup
+
+1. **Create/Configure Firebase Project**
+   ```bash
+   # Login to Firebase
+   firebase login
+   
+   # Initialize Firebase in your project directory
+   firebase init hosting
+   
+   # Follow the prompts:
+   # - Select existing project or create new one
+   # - Choose 'public' as your public directory
+   # - Configure as single-page app: Yes
+   # - Don't overwrite index.html
+   ```
+
+2. **Configure Multiple Environments**
+   
+   Add projects to `.firebaserc`:
+   ```json
+   {
+     "projects": {
+       "staging": "your-staging-project-id",
+       "production": "your-production-project-id"
+     }
+   }
+   ```
+
+3. **Manual Deployment**
+   ```bash
+   # Deploy to staging
+   firebase deploy --project staging
+   
+   # Deploy to production
+   firebase deploy --project production
+   ```
+
+### 🚀 Quick Firebase Deployment
+
+Use the included PowerShell script for easy local deployment:
+
+```powershell
+# Validate configuration only
+.\deploy-firebase.ps1 -ValidateOnly
+
+# Deploy to staging
+.\deploy-firebase.ps1 -Environment staging
+
+# Deploy to production
+.\deploy-firebase.ps1 -Environment production
+
+# Preview locally before deployment
+.\deploy-firebase.ps1 -Preview
+```
+
+**Script Features:**
+- ✅ Validates all requirements and configuration
+- 🔐 Checks for security issues (leaked secrets)
+- 🌍 Supports multiple environments
+- 📋 Provides detailed deployment summary
+- 🔍 Includes preview mode for local testing
+
+### 🔐 Secret Management for GitHub Actions
+
+#### Required Secrets for Firebase Deployment
+
+1. **FIREBASE_TOKEN** - For Firebase CLI authentication
+   ```bash
+   # Generate token locally
+   firebase login:ci
+   
+   # Copy the token and add to GitHub Secrets
+   ```
+
+2. **Optional: GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY** - For Google Cloud operations
+   ```bash
+   # Create service account with Firebase Admin SDK permissions
+   gcloud iam service-accounts create firebase-deploy-sa \
+     --display-name="Firebase Deploy Service Account"
+   
+   # Grant necessary permissions
+   gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+     --member="serviceAccount:firebase-deploy-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+     --role="roles/firebase.admin"
+   
+   # Create and download key
+   gcloud iam service-accounts keys create firebase-key.json \
+     --iam-account=firebase-deploy-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com
+   
+   # Add the entire JSON content to GitHub Secrets
+   ```
+
+#### Setting Up GitHub Secrets
+
+1. **Go to Repository Settings** → Secrets and Variables → Actions
+
+2. **Add Required Secrets:**
+   
+   | Secret Name | Description | How to Get |
+   |-------------|-------------|------------|
+   | `FIREBASE_TOKEN` | Firebase CLI token | Run `firebase login:ci` |
+   | `GOOGLE_CLOUD_SERVICE_ACCOUNT_KEY` | Service account JSON key | Create service account with Firebase Admin role |
+
+3. **Optional Environment-Specific Secrets:**
+   ```
+   STAGING_FIREBASE_PROJECT_ID=your-staging-project
+   PRODUCTION_FIREBASE_PROJECT_ID=your-production-project
+   ```
+
+#### GitHub Actions Workflow Features
+
+The Firebase deployment workflow (`.github/workflows/firebase-deploy.yml`) includes:
+
+- **Automatic Environment Detection**: Deploys to staging for PRs, production for main branch
+- **Manual Deployment**: Trigger deployments manually with environment selection
+- **Security Scanning**: Checks for accidentally committed secrets
+- **Build Validation**: Ensures all required files are present
+- **PR Comments**: Automatically comments on PRs with deployment status
+
+#### Triggering Deployments
+
+1. **Automatic Deployment:**
+   - Push to `main` → Production deployment
+   - Create PR → Staging deployment preview
+
+2. **Manual Deployment:**
+   - Go to Actions → "Deploy to Firebase Hosting"
+   - Click "Run workflow"
+   - Select environment (staging/production)
+   - Click "Run workflow"
+
+#### Security Best Practices
+
+1. **Never Commit Secrets:**
+   ```bash
+   # Add to .gitignore
+   echo "*.key" >> .gitignore
+   echo "*.json" >> .gitignore
+   echo ".env*" >> .gitignore
+   ```
+
+2. **Use Environment-Specific Configs:**
+   - Keep sensitive configuration in GitHub Secrets
+   - Use different Firebase projects for staging/production
+   - Validate configs in CI/CD before deployment
+
+3. **Monitor Deployments:**
+   - Check Firebase Console after deployments
+   - Set up Firebase Analytics for usage monitoring
+   - Review GitHub Actions logs for any issues
+
+#### Troubleshooting Firebase Deployment
+
+1. **Permission Errors:**
+   ```bash
+   # Check Firebase project access
+   firebase projects:list
+   
+   # Verify project selection
+   firebase use --project YOUR_PROJECT_ID
+   ```
+
+2. **Token Expiration:**
+   ```bash
+   # Generate new token
+   firebase login:ci
+   
+   # Update GitHub Secret with new token
+   ```
+
+3. **Build Failures:**
+   - Check GitHub Actions logs
+   - Verify all required files exist in `public/` directory
+   - Ensure Firebase configuration is valid
+
 ## 🔑 Authentication Setup
 
 ### For Development/Testing
@@ -218,18 +396,34 @@ For production use, implement proper authentication:
 
 1. **Open the deployed web app** (Firebase will provide the URL)
 2. **Allow camera access** when prompted
-3. **Enter your access token** in the configuration panel
-4. **Set an alert condition** (e.g., "person in frame", "unsafe behavior")
-5. **Click "Start Analysis"** to begin real-time analysis
-6. **Monitor alerts** in the right panel
+3. **Enter your Vertex AI access token** in the configuration panel
+4. **Select analysis interval** (500ms to 5s based on your needs)
+5. **Click "Start Analysis"** to begin real-time scene analysis
+6. **View scene descriptions** in both the main video area and results panel
 
-### Example Alert Conditions
+### What the App Does
 
-- `"person not wearing helmet"`
-- `"child falling or in danger"`
-- `"vehicle in restricted area"`
-- `"fire or smoke detected"`
-- `"person with weapon"`
+The app continuously analyzes your webcam feed and provides:
+- **Real-time scene descriptions** of what's visible
+- **Detailed analysis** including people, objects, activities
+- **Timestamped results** showing the history of observations
+- **Live feedback** with color-coded status indicators
+
+### Analysis Features
+
+- **Generic scene understanding**: Describes everything visible in the frame
+- **People detection**: Identifies people and their activities
+- **Object recognition**: Identifies objects, furniture, environments
+- **Activity analysis**: Describes what's happening in the scene
+- **Environment context**: Room type, lighting, setting details
+
+### Example Scene Descriptions
+
+The AI model will provide descriptions like:
+- `"A person sitting at a desk with a laptop computer in a well-lit office environment"`
+- `"Two people having a conversation in a living room with a couch and coffee table"`
+- `"An empty kitchen with modern appliances and natural lighting from a window"`
+- `"A person walking through a hallway carrying a bag"`
 
 ## 🔧 Configuration Options
 
@@ -239,6 +433,16 @@ Choose how often to analyze frames:
 - **500ms**: Very responsive, higher API usage
 - **1s**: Good balance (default)
 - **2-5s**: Less responsive, lower costs
+
+### Access Token
+
+You need a valid Google Cloud access token with Vertex AI permissions:
+```bash
+# Get token for testing
+gcloud auth print-access-token
+
+# For production, use service account tokens
+```
 
 ### Environment Detection
 

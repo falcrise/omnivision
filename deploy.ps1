@@ -104,7 +104,7 @@ function Test-Prerequisites {
         } else {
             Write-Host "⚠️  No active Firebase project selected" -ForegroundColor Yellow
             Write-Host "Quick fix: Run .\deploy.ps1 -SetProject" -ForegroundColor Cyan
-            Write-Host "Or manually: firebase use deeptech-ai-stuff" -ForegroundColor Gray
+            Write-Host "Or manually: firebase use falcon-deeptech-ai-stuff" -ForegroundColor Gray
             return $false
         }
     } catch {
@@ -473,7 +473,7 @@ function Get-ProjectIdFromConfig {
             Write-Host "Could not read project ID from config.js" -ForegroundColor Yellow
         }
     }
-    return "your-firebase-project-id"  # fallback
+    return "falcon-deeptech-ai-stuff"  # fallback
 }
 
 # Main script logic

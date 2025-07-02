@@ -1,10 +1,11 @@
 // Configuration for Vertex AI Video Analysis App
+// This app provides real-time scene analysis without alerts
 window.CONFIG = {    // Vertex AI Configuration
     VERTEX_AI: {
-        ENDPOINT_ID: "deployedModelEndpoitnId", // Your deployed model endpoint
-        PROJECT_ID: "deployedModelsVertexProjectId",         // Project number (not project ID string)
-        PROJECT_ID_STRING: "your-firebase-project-id", // Project ID string for reference
-        REGION: "asia-southeast1",
+        ENDPOINT_ID: "mg-endpoint-1751354529", // Your deployed model endpoint
+        PROJECT_ID: "609216698421",         // Project number (not project ID string)
+        PROJECT_ID_STRING: "falcon-deeptech-ai-stuff", // Project ID string for reference
+        REGION: "europe-west1",
         
         // This will be constructed automatically from the above values
         get DEDICATED_ENDPOINT_DOMAIN() {
@@ -20,14 +21,14 @@ window.CONFIG = {    // Vertex AI Configuration
     // App Configuration
     APP: {
         DEFAULT_INTERVAL: 1000, // Default analysis interval in ms
-        MAX_ALERTS: 50, // Maximum number of alerts to keep in memory
+        MAX_ALERTS: 10, // Maximum number of scene descriptions to keep in memory
         DEFAULT_JPEG_QUALITY: 0.8, // Quality for canvas image capture
         
-        // Model parameters
+        // Model parameters for scene description
         MODEL_PARAMS: {
-            max_tokens: 200,
-            temperature: 0.3,
-            top_p: 0.9,
+            max_tokens: 256,
+            temperature: 0.1,
+            top_p: 0.95,
             top_k: 40
         }
     },

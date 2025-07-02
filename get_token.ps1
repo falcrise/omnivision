@@ -4,9 +4,9 @@ Write-Host ""
 
 # Ensure we're using the correct project
 $currentProject = gcloud config get-value project 2>$null
-if ($currentProject -ne "your-firebase-project-id") {
+if ($currentProject -ne "falcon-deeptech-ai-stuff") {
     Write-Host "Setting correct project..." -ForegroundColor Yellow
-    gcloud config set project your-firebase-project-id
+    gcloud config set project falcon-deeptech-ai-stuff
 }
 
 Write-Host "Getting fresh access token..." -ForegroundColor Yellow
